@@ -2,7 +2,7 @@ FROM php:8.1-apache-buster
 
 # Surpresses debconf complaints of trying to install apt packages interactively
 # https://github.com/moby/moby/issues/4032#issuecomment-192327844
- 
+
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Update
@@ -15,23 +15,24 @@ RUN apt-get -y update --fix-missing && \
 # Install useful tools and install important libaries
 RUN apt-get -y update && \
     apt-get -y --no-install-recommends install nano wget \
-dialog \
-libsqlite3-dev \
-libsqlite3-0 && \
+    dialog \
+    zip unzip \
+    libsqlite3-dev \
+    libsqlite3-0 && \
     apt-get -y --no-install-recommends install default-mysql-client \
-zlib1g-dev \
-libzip-dev \
-libicu-dev && \
+    zlib1g-dev \
+    libzip-dev \
+    libicu-dev && \
     apt-get -y --no-install-recommends install --fix-missing apt-utils \
-build-essential \
-git \
-curl \
-libonig-dev && \ 
+    build-essential \
+    git \
+    curl \
+    libonig-dev && \ 
     apt-get install -y iputils-ping && \
     apt-get -y --no-install-recommends install --fix-missing libcurl4 \
-libcurl4-openssl-dev \
-zip \
-openssl && \
+    libcurl4-openssl-dev \
+    zip \
+    openssl && \
     rm -rf /var/lib/apt/lists/* && \
     curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
@@ -66,6 +67,22 @@ RUN cd /usr/local/src && \
     rm -rf imagick && \
     docker-php-ext-enable imagick
 
+# ORACLE oci 
+RUN mkdir /opt/oracle \
+    && cd /opt/oracle     
+
+ADD instantclient-basic-linux.x64-12.1.0.2.0.zip /opt/oracle
+ADD instantclient-sdk-linux.x64-12.1.0.2.0.zip /opt/oracle
+
+# Install Oracle Instantclient
+RUN  unzip /opt/oracle/instantclient-basic-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
+    && unzip /opt/oracle/instantclient-sdk-linux.x64-12.1.0.2.0.zip -d /opt/oracle \
+    && ln -s /opt/oracle/instantclient_12_1/libclntsh.so.12.1 /opt/oracle/instantclient_12_1/libclntsh.so \
+    && ln -s /opt/oracle/instantclient_12_1/libclntshcore.so.12.1 /opt/oracle/instantclient_12_1/libclntshcore.so \
+    && ln -s /opt/oracle/instantclient_12_1/libocci.so.12.1 /opt/oracle/instantclient_12_1/libocci.so \
+    && rm -rf /opt/oracle/*.zip
+
+ENV LD_LIBRARY_PATH  /opt/oracle/instantclient_12_1:${LD_LIBRARY_PATH}
 # Other PHP8 Extensions
 
 RUN docker-php-ext-install pdo_mysql && \
@@ -83,11 +100,20 @@ RUN docker-php-ext-install pdo_mysql && \
 # Install Freetype 
 RUN apt-get -y update && \
     apt-get --no-install-recommends install -y libfreetype6-dev \
-libjpeg62-turbo-dev \
-libpng-dev && \
+    libjpeg62-turbo-dev \
+    libpng-dev && \
     rm -rf /var/lib/apt/lists/* && \
     docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg && \
     docker-php-ext-install gd
+
+# Install Oracle extensions
+RUN echo 'instantclient,/opt/oracle/instantclient_12_1/' | pecl install oci8 \ 
+    && docker-php-ext-enable \
+    oci8 \ 
+    && docker-php-ext-configure pdo_oci --with-pdo-oci=instantclient,/opt/oracle/instantclient_12_1,12.1 \
+    && docker-php-ext-install \
+    pdo_oci 
+RUN mkdir -p /etc/apache2/ssl
 
 # Insure an SSL directory exists
 RUN mkdir -p /etc/apache2/ssl
